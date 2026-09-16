@@ -67,6 +67,14 @@ const FALLBACK_DATASET = {
       values: [95, 103, 106, 99, 101]
     },
     {
+      id: "ncd_daily_avg",
+      name: "NCD เฉลี่ยต่อวัน",
+      category: "opd_ncd",
+      unit: "ราย/วัน",
+      type: "rate",
+      values: [65, 71, 73, 70, 65]
+    },
+    {
       id: "er_patients",
       name: "ผู้ป่วย ER",
       category: "er",
@@ -263,15 +271,12 @@ async function syncGoogleSheetsData() {
  * Parse Google Sheets CSV text into structured Dataset
  */
 function parseGoogleSheetsCSV(csvText) {
-  // Use PapaParse if available
   let rows = [];
   if (typeof Papa !== 'undefined') {
     const results = Papa.parse(csvText, { skipEmptyLines: true });
     rows = results.data;
   } else {
-    // Simple CSV parser fallback
     rows = csvText.split('\n').map(line => {
-      // split by comma considering quotes
       const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
       return matches ? matches.map(m => m.replace(/^"|"$/g, '').trim()) : [];
     });
@@ -301,11 +306,21 @@ function parseGoogleSheetsCSV(csvText) {
     const rawName = row[0].trim();
     if (!rawName) continue;
 
-    // Find matching fallback metric to inherit metadata (category, unit, etc.)
-    const fallbackMatch = FALLBACK_DATASET.metrics.find(m => 
-      m.name.trim().toLowerCase() === rawName.toLowerCase() ||
-      rawName.toLowerCase().includes(m.name.trim().toLowerCase())
+    // Robust matching logic: exact match first, then longest matching metric name
+    let fallbackMatch = FALLBACK_DATASET.metrics.find(m => 
+      m.name.trim().toLowerCase() === rawName.toLowerCase()
     );
+
+    if (!fallbackMatch) {
+      const matches = FALLBACK_DATASET.metrics.filter(m => 
+        rawName.toLowerCase().includes(m.name.trim().toLowerCase()) ||
+        m.name.trim().toLowerCase().includes(rawName.toLowerCase())
+      );
+      if (matches.length > 0) {
+        matches.sort((a, b) => b.name.length - a.name.length);
+        fallbackMatch = matches[0];
+      }
+    }
 
     const values = [];
     for (let j = 1; j <= 5; j++) {
@@ -324,6 +339,27 @@ function parseGoogleSheetsCSV(csvText) {
     });
   }
 
+  // Ensure NCD daily average metric exists (derive if missing)
+  const hasNcdDaily = datasetMetrics.some(m => m.id === 'ncd_daily_avg');
+  if (!hasNcdDaily) {
+    const opdNcdDaily = datasetMetrics.find(m => m.id === 'opd_ncd_daily_avg');
+    const opdDaily = datasetMetrics.find(m => m.id === 'opd_daily_avg');
+    
+    let ncdDailyVals = [65, 71, 73, 70, 65];
+    if (opdNcdDaily && opdDaily) {
+      ncdDailyVals = opdNcdDaily.values.map((val, idx) => Math.max(0, val - opdDaily.values[idx]));
+    }
+
+    datasetMetrics.push({
+      id: "ncd_daily_avg",
+      name: "NCD เฉลี่ยต่อวัน",
+      category: "opd_ncd",
+      unit: "ราย/วัน",
+      type: "rate",
+      values: ncdDailyVals
+    });
+  }
+
   return {
     years: years,
     yearLabels: yearLabels,
@@ -336,7 +372,18 @@ function parseGoogleSheetsCSV(csvText) {
  * Helper to get metric by ID
  */
 function getMetric(metricId) {
-  return activeDataset.metrics.find(m => m.id === metricId) || { values: [0,0,0,0,0], unit: "" };
+  const match = activeDataset.metrics.find(m => m.id === metricId);
+  if (match) return match;
+
+  // Fallback calculation for ncd_daily_avg if requested
+  if (metricId === "ncd_daily_avg") {
+    const opdNcdDaily = getMetric("opd_ncd_daily_avg").values;
+    const opdDaily = getMetric("opd_daily_avg").values;
+    const ncdDailyVals = opdNcdDaily.map((val, idx) => Math.max(0, val - (opdDaily[idx] || 0)));
+    return { id: "ncd_daily_avg", name: "NCD เฉลี่ยต่อวัน", category: "opd_ncd", unit: "ราย/วัน", type: "rate", values: ncdDailyVals };
+  }
+
+  return { values: [0,0,0,0,0], unit: "" };
 }
 
 /**
@@ -351,23 +398,19 @@ function getKpiSummary() {
   const referEr = getMetric("refer_er");
   const referIpd = getMetric("refer_ipd");
 
-  // Peak OPD (2567 = 104,733)
   const peakOpdValue = Math.max(...opdAll.values);
   const peakOpdIndex = opdAll.values.indexOf(peakOpdValue);
   const peakOpdYear = activeDataset.years[peakOpdIndex];
 
-  // Peak Bed Occupancy Rate (2567 = 83.22%)
   const peakBedValue = Math.max(...ipdBed.values);
   const peakBedIndex = ipdBed.values.indexOf(peakBedValue);
   const peakBedYear = activeDataset.years[peakBedIndex];
 
-  // Home Ward Latest Year (2569 = 425) & Total Bed Days (3,216 in 2569 or cumulative)
   const homeWardLatest = homeWard.values[4]; // 2569
   const homeWardBedDaysLatest = homeWardDays.values[4]; // 3216
 
-  // Total Refer Out 2569 (Refer OPD + Refer ER + Refer IPD)
-  const referTotal2566 = referOpd.values[1] + referEr.values[1] + referIpd.values[1]; // 4108
-  const referTotal2569 = referOpd.values[4] + referEr.values[4] + referIpd.values[4]; // 2398
+  const referTotal2566 = referOpd.values[1] + referEr.values[1] + referIpd.values[1];
+  const referTotal2569 = referOpd.values[4] + referEr.values[4] + referIpd.values[4];
   const referDiffPct = (((referTotal2569 - referTotal2566) / referTotal2566) * 100).toFixed(1);
 
   return {

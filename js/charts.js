@@ -64,7 +64,9 @@ function renderOverviewCharts() {
   const ncdData = getMetric("ncd_patients").values;
   const erData = getMetric("er_patients").values;
 
-  const opdDaily = getMetric("opd_ncd_daily_avg").values;
+  const opdNcdDaily = getMetric("opd_ncd_daily_avg").values;
+  const opdDaily = getMetric("opd_daily_avg").values;
+  const ncdDaily = getMetric("ncd_daily_avg").values;
   const erDaily = getMetric("er_daily_avg").values;
 
   // Chart 1.1: OPD vs NCD vs ER Comparison
@@ -112,7 +114,7 @@ function renderOverviewCharts() {
     });
   }
 
-  // Chart 1.2: Daily Average (OPD+NCD vs ER)
+  // Chart 1.2: Daily Average (OPD+NCD, OPD, NCD, ER)
   const ctx2 = document.getElementById('chartOverviewDaily');
   if (ctx2) {
     if (chartInstances.overviewDaily) chartInstances.overviewDaily.destroy();
@@ -124,25 +126,51 @@ function renderOverviewCharts() {
         datasets: [
           {
             label: 'OPD + NCD เฉลี่ยต่อวัน',
-            data: opdDaily,
-            borderColor: '#0d9488',
-            backgroundColor: 'rgba(13, 148, 136, 0.1)',
+            data: opdNcdDaily,
+            borderColor: '#0d9488', // Teal
+            backgroundColor: 'rgba(13, 148, 136, 0.08)',
             borderWidth: 3,
             tension: 0.3,
             fill: true,
             pointRadius: 5,
-            pointHoverRadius: 7
+            pointHoverRadius: 7,
+            pointStyle: 'circle'
+          },
+          {
+            label: 'OPD เฉลี่ยต่อวัน',
+            data: opdDaily,
+            borderColor: '#6366f1', // Indigo
+            backgroundColor: 'transparent',
+            borderWidth: 2.5,
+            tension: 0.3,
+            fill: false,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointStyle: 'rect'
+          },
+          {
+            label: 'NCD เฉลี่ยต่อวัน',
+            data: ncdDaily,
+            borderColor: '#10b981', // Emerald
+            backgroundColor: 'transparent',
+            borderWidth: 2.5,
+            tension: 0.3,
+            fill: false,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointStyle: 'triangle'
           },
           {
             label: 'ผู้ป่วย ER เฉลี่ยต่อวัน',
             data: erDaily,
-            borderColor: '#f59e0b',
-            backgroundColor: 'rgba(245, 158, 11, 0.1)',
-            borderWidth: 3,
+            borderColor: '#f59e0b', // Amber
+            backgroundColor: 'transparent',
+            borderWidth: 2.5,
             tension: 0.3,
-            fill: true,
+            fill: false,
             pointRadius: 5,
-            pointHoverRadius: 7
+            pointHoverRadius: 7,
+            pointStyle: 'star'
           }
         ]
       },
