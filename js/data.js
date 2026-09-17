@@ -68,7 +68,7 @@ const FALLBACK_DATASET = {
     {
       id: "cauti_rate",
       no: 5,
-      name: "อัตราการติดเชื้อจากสายสวนปัสสาวะ (CA-UTI) ต่อ 1,000 วันคาสาย",
+      name: "อัตราการติดเชื้อจากสายสวนปัสสาวะ (CA-UTI) ต่อ 1,000 วันคาสายสวนปัสสาวะ ≤ 5",
       category: "safety",
       unit: "ต่อ 1,000 วันคาสาย",
       target: "< 2:1000",
@@ -209,9 +209,9 @@ function parseGoogleSheetsCSV(csvText) {
 
     // Match with fallback metric definition
     const fallbackMatch = FALLBACK_DATASET.metrics.find(m => 
+      m.no === noVal ||
       m.name.trim().toLowerCase() === rawName.toLowerCase() ||
-      rawName.toLowerCase().includes(m.name.trim().slice(0, 10).toLowerCase()) ||
-      m.no === noVal
+      rawName.toLowerCase().includes(m.name.trim().slice(0, 10).toLowerCase())
     );
 
     const values = [];
