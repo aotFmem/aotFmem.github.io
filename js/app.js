@@ -1,17 +1,15 @@
 /**
  * Nong Muang Hospital Analytics Web Application - Main Controller
+ * Data Dashboard กลุ่มงานการพยาบาล - KPIMaster
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Initialize Lucide Icons
   if (window.lucide) lucide.createIcons();
 
-  // Setup Event Listeners
   initTabNavigation();
   initSyncControls();
   initTableControls();
 
-  // Perform Initial Sync (Live Google Sheets Sync or Fallback)
   await performDataSync();
 });
 
@@ -30,7 +28,7 @@ async function performDataSync() {
     syncIcon.classList.add('animate-spin');
   }
 
-  showToast('กำลังเชื่อมต่อข้อมูลจาก Google Sheets...', 'info');
+  showToast('กำลังเชื่อมต่อข้อมูลสด KPIMaster จาก Google Sheets...', 'info');
 
   const result = await syncGoogleSheetsData();
 
@@ -42,24 +40,19 @@ async function performDataSync() {
     syncBtn.classList.remove('opacity-75');
   }
 
-  // Update Status Badge & Metadata
   updateStatusBadge(result);
-
-  // Refresh KPI Cards
   updateKpiCards();
 
-  // Refresh Active Tab Charts
   const activeTabBtn = document.querySelector('.nav-tab.active');
   const activeTabId = activeTabBtn ? activeTabBtn.getAttribute('data-tab') : 'tab-overview';
   updateDashboardCharts(activeTabId);
 
-  // Refresh Heatmap Table
   renderHeatmapTable();
 
   if (result.isLive) {
-    showToast('อัปเดตข้อมูลสดจาก Google Sheets สำเร็จ!', 'success');
+    showToast('อัปเดตข้อมูลสด KPIMaster จาก Google Sheets สำเร็จ!', 'success');
   } else {
-    showToast(`ใช้งานข้อมูลสำรอง (${result.message})`, 'warning');
+    showToast(`ใช้งานข้อมูลสำรอง KPIMaster (${result.message})`, 'warning');
   }
 }
 
@@ -78,13 +71,13 @@ function updateStatusBadge(syncResult) {
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
           <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
         </span>
-        Live Google Sheets Sync
+        Live KPIMaster Sync
       `;
     } else {
       badge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold status-badge-fallback shadow-sm';
       badge.innerHTML = `
         <span class="inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-        Offline Fallback Data
+        Offline Fallback KPIMaster
       `;
     }
   }
@@ -96,34 +89,34 @@ function updateStatusBadge(syncResult) {
 }
 
 /**
- * Update 4 KPI Highlight Cards with dynamic metrics
+ * Update 4 KPI Highlight Cards for Nursing KPIMaster
  */
 function updateKpiCards() {
   const kpi = getKpiSummary();
 
-  // Card 1: Peak OPD
+  // Card 1: IPD Satisfaction
   const kpiOpdVal = document.getElementById('kpiOpdVal');
   const kpiOpdSub = document.getElementById('kpiOpdSub');
-  if (kpiOpdVal) kpiOpdVal.textContent = kpi.peakOpd.val;
-  if (kpiOpdSub) kpiOpdSub.textContent = `สูงสุดในปี ${kpi.peakOpd.year} (${kpi.peakOpd.yoy})`;
+  if (kpiOpdVal) kpiOpdVal.textContent = kpi.ipdSat.val;
+  if (kpiOpdSub) kpiOpdSub.textContent = `${kpi.ipdSat.target} (${kpi.ipdSat.sub})`;
 
-  // Card 2: Peak Bed Occupancy
+  // Card 2: Community Satisfaction
   const kpiBedVal = document.getElementById('kpiBedVal');
   const kpiBedSub = document.getElementById('kpiBedSub');
-  if (kpiBedVal) kpiBedVal.textContent = kpi.peakBed.val;
-  if (kpiBedSub) kpiBedSub.textContent = `สูงสุดในปี ${kpi.peakBed.year} (ความหนาแน่นสูง)`;
+  if (kpiBedVal) kpiBedVal.textContent = kpi.commSat.val;
+  if (kpiBedSub) kpiBedSub.textContent = `${kpi.commSat.target} (${kpi.commSat.sub})`;
 
-  // Card 3: Home Ward
+  // Card 3: Competency Evaluation
   const kpiHomeVal = document.getElementById('kpiHomeVal');
   const kpiHomeSub = document.getElementById('kpiHomeSub');
-  if (kpiHomeVal) kpiHomeVal.textContent = kpi.homeWard.val;
-  if (kpiHomeSub) kpiHomeSub.textContent = `${kpi.homeWard.days} (${kpi.homeWard.growth})`;
+  if (kpiHomeVal) kpiHomeVal.textContent = kpi.compEval.val;
+  if (kpiHomeSub) kpiHomeSub.textContent = `${kpi.compEval.target} (${kpi.compEval.sub})`;
 
-  // Card 4: Refer Out
+  // Card 4: Patient Safety (Pressure Ulcers & CA-UTI)
   const kpiReferVal = document.getElementById('kpiReferVal');
   const kpiReferSub = document.getElementById('kpiReferSub');
-  if (kpiReferVal) kpiReferVal.textContent = kpi.referral.val;
-  if (kpiReferSub) kpiReferSub.textContent = `ลดลง ${kpi.referral.diffPct} ${kpi.referral.sub}`;
+  if (kpiReferVal) kpiReferVal.textContent = kpi.safety.val;
+  if (kpiReferSub) kpiReferSub.textContent = kpi.safety.sub;
 }
 
 /**
@@ -137,11 +130,9 @@ function initTabNavigation() {
     btn.addEventListener('click', () => {
       const targetTab = btn.getAttribute('data-tab');
 
-      // Update Nav Buttons State
       tabBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
 
-      // Update Tab Views
       tabContents.forEach(content => {
         if (content.id === targetTab) {
           content.classList.remove('hidden');
@@ -150,7 +141,6 @@ function initTabNavigation() {
         }
       });
 
-      // Refresh Charts for selected tab
       updateDashboardCharts(targetTab);
     });
   });

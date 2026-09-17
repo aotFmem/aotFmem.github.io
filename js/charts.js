@@ -1,6 +1,6 @@
 /**
  * Nong Muang Hospital Analytics Web Application - Charts Manager
- * Handles Chart.js instances for Overview, IPD & Home Ward, Referral & Mortality tabs
+ * Data Dashboard กลุ่มงานการพยาบาล - KPIMaster
  */
 
 // Global Chart Instances Store
@@ -32,81 +32,131 @@ const COMMON_OPTIONS = {
   },
   scales: {
     x: {
-      grid: { display: false },
+      grid: { color: '#f1f5f9' },
       ticks: { font: { family: 'Sarabun', size: 12 }, color: '#64748b' }
     },
     y: {
-      grid: { color: '#f1f5f9' },
-      ticks: { font: { family: 'Sarabun', size: 12 }, color: '#64748b' }
+      grid: { display: false },
+      ticks: { font: { family: 'Sarabun', size: 12 }, color: '#334155' }
     }
   }
 };
 
 /**
- * Render/Update All Dashboard Charts based on active Tab
+ * Render/Update Dashboard Charts based on active Tab
  */
 function updateDashboardCharts(activeTab = 'tab-overview') {
   if (activeTab === 'tab-overview') {
     renderOverviewCharts();
   } else if (activeTab === 'tab-ipd') {
-    renderIpdHomeWardCharts();
+    renderQualitySafetyCharts();
   } else if (activeTab === 'tab-referral') {
-    renderReferralMortalityCharts();
+    renderSatisfactionCommunityCharts();
   }
 }
 
 /**
- * Tab 1: Overview Charts
+ * Tab 1: KPIMaster Overview Charts
  */
 function renderOverviewCharts() {
+  const metrics = activeDataset.metrics;
   const years = activeDataset.yearLabels;
-  const opdData = getMetric("opd_patients").values;
-  const ncdData = getMetric("ncd_patients").values;
-  const erData = getMetric("er_patients").values;
 
-  const opdNcdDaily = getMetric("opd_ncd_daily_avg").values;
-  const opdDaily = getMetric("opd_daily_avg").values;
-  const ncdDaily = getMetric("ncd_daily_avg").values;
-  const erDaily = getMetric("er_daily_avg").values;
-
-  // Chart 1.1: OPD vs NCD vs ER Comparison
+  // Chart 1.1: Horizontal Bar Chart showing KPI Performance & Status (Green/Yellow/Red)
   const ctx1 = document.getElementById('chartOverviewMain');
   if (ctx1) {
     if (chartInstances.overviewMain) chartInstances.overviewMain.destroy();
-    
+
+    // Full names for Y-axis without cutting off text
+    const fullLabels = [
+      "1. Door to EKG < 10 นาที",
+      "2. สมรรถนะดูแลผู้ป่วยโรคสำคัญ",
+      "3. บันทึกกระบวนการพยาบาล",
+      "4. แผลกดทับรายใหม่",
+      "5. ติดเชื้อ CA-UTI",
+      "6. การเยี่ยมบ้านตามเกณฑ์",
+      "7. ความพึงพอใจ OPD",
+      "8. ความพึงพอใจ IPD",
+      "9. ความพึงพอใจ ชุมชน"
+    ];
+
+    // % Achievement of Target (% บรรลุเป้าหมาย) to put all 9 KPIs on a unified 0-100% scale
+    const achievementPcts = metrics.map(m => {
+      const val = m.values[2];
+      const target = m.targetVal;
+      const op = m.targetOperator;
+
+      if (op === '<=' || op === '<') {
+        if (val <= target) return 100;
+        return Math.max(0, Math.round((target / val) * 100));
+      } else {
+        return Math.min(120, Math.round((val / target) * 100));
+      }
+    });
+
+    // Color bars dynamically based on status: Pass (Emerald), Caution (Amber), Fail (Rose)
+    const barColors = metrics.map(m => {
+      const evalRes = evaluateKpiTarget(m, m.values[2]);
+      if (evalRes.status === 'pass') return '#10b981';    // Emerald Green
+      if (evalRes.status === 'caution') return '#f59e0b'; // Amber Yellow
+      return '#f43f5e';                                   // Rose Red
+    });
+
     chartInstances.overviewMain = new Chart(ctx1, {
       type: 'bar',
       data: {
-        labels: years,
+        labels: fullLabels,
         datasets: [
           {
-            label: 'ผู้ป่วย OPD',
-            data: opdData,
-            backgroundColor: '#0d9488', // Teal
-            borderRadius: 6
-          },
-          {
-            label: 'ผู้ป่วย NCD',
-            data: ncdData,
-            backgroundColor: '#6366f1', // Indigo
-            borderRadius: 6
-          },
-          {
-            label: 'ผู้ป่วย ER',
-            data: erData,
-            backgroundColor: '#f59e0b', // Amber
-            borderRadius: 6
+            label: '% อัตราการบรรลุเป้าหมาย (% Achievement)',
+            data: achievementPcts,
+            backgroundColor: barColors,
+            borderRadius: 6,
+            barThickness: 18
           }
         ]
       },
       options: {
-        ...COMMON_OPTIONS,
+        indexAxis: 'y', // Horizontal Bar Chart for maximum readability
+        responsive: true,
+        maintainAspectRatio: false,
         plugins: {
-          ...COMMON_OPTIONS.plugins,
+          legend: {
+            display: false // Status colors self-explain via tooltips & badges
+          },
           tooltip: {
             ...COMMON_OPTIONS.plugins.tooltip,
             callbacks: {
-              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} ราย`
+              title: (ctx) => metrics[ctx[0].dataIndex].name,
+              label: (ctx) => {
+                const metric = metrics[ctx.dataIndex];
+                const val = metric.values[2];
+                const evalRes = evaluateKpiTarget(metric, val);
+                return [
+                  ` ผลงานปี 2569: ${val} ${metric.unit}`,
+                  ` เกณฑ์เป้าหมาย: ${metric.target}`,
+                  ` อัตราบรรลุเป้าหมาย: ${ctx.raw}%`,
+                  ` สถานะ: ${evalRes.label}`
+                ];
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: '#f1f5f9' },
+            min: 0,
+            max: 120,
+            ticks: {
+              font: { family: 'Sarabun', size: 11 },
+              callback: (val) => val === 100 ? '100% (เป้าหมาย)' : `${val}%`
+            }
+          },
+          y: {
+            grid: { display: false },
+            ticks: {
+              font: { family: 'Sarabun', size: 11, weight: '600' },
+              color: '#1e293b'
             }
           }
         }
@@ -114,10 +164,14 @@ function renderOverviewCharts() {
     });
   }
 
-  // Chart 1.2: Daily Average (OPD+NCD, OPD, NCD, ER)
+  // Chart 1.2: ความพึงพอใจ 3 ด้าน ย้อนหลัง 3 ปี
   const ctx2 = document.getElementById('chartOverviewDaily');
   if (ctx2) {
     if (chartInstances.overviewDaily) chartInstances.overviewDaily.destroy();
+
+    const opdSat = getMetric("opd_satisfaction").values;
+    const ipdSat = getMetric("ipd_satisfaction").values;
+    const commSat = getMetric("community_satisfaction").values;
 
     chartInstances.overviewDaily = new Chart(ctx2, {
       type: 'line',
@@ -125,63 +179,54 @@ function renderOverviewCharts() {
         labels: years,
         datasets: [
           {
-            label: 'OPD + NCD เฉลี่ยต่อวัน',
-            data: opdNcdDaily,
+            label: 'ผู้ป่วยใน (IPD)',
+            data: ipdSat,
             borderColor: '#0d9488', // Teal
-            backgroundColor: 'rgba(13, 148, 136, 0.08)',
+            backgroundColor: 'rgba(13, 148, 136, 0.1)',
             borderWidth: 3,
             tension: 0.3,
-            fill: true,
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            pointStyle: 'circle'
-          },
-          {
-            label: 'OPD เฉลี่ยต่อวัน',
-            data: opdDaily,
-            borderColor: '#6366f1', // Indigo
-            backgroundColor: 'transparent',
-            borderWidth: 2.5,
-            tension: 0.3,
             fill: false,
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            pointStyle: 'rect'
+            pointRadius: 6
           },
           {
-            label: 'NCD เฉลี่ยต่อวัน',
-            data: ncdDaily,
+            label: 'ประชาชนในชุมชน',
+            data: commSat,
             borderColor: '#10b981', // Emerald
             backgroundColor: 'transparent',
-            borderWidth: 2.5,
+            borderWidth: 3,
             tension: 0.3,
             fill: false,
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            pointStyle: 'triangle'
+            pointRadius: 6
           },
           {
-            label: 'ผู้ป่วย ER เฉลี่ยต่อวัน',
-            data: erDaily,
-            borderColor: '#f59e0b', // Amber
+            label: 'ผู้ป่วยนอก (OPD)',
+            data: opdSat,
+            borderColor: '#6366f1', // Indigo
             backgroundColor: 'transparent',
-            borderWidth: 2.5,
+            borderWidth: 3,
             tension: 0.3,
             fill: false,
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            pointStyle: 'star'
+            pointRadius: 6
           }
         ]
       },
       options: {
         ...COMMON_OPTIONS,
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { family: 'Sarabun', size: 12 }, color: '#64748b' } },
+          y: {
+            grid: { color: '#f1f5f9' },
+            min: 75,
+            max: 100,
+            ticks: { font: { family: 'Sarabun', size: 12 }, callback: (v) => `${v}%` }
+          }
+        },
         plugins: {
           ...COMMON_OPTIONS.plugins,
           tooltip: {
             ...COMMON_OPTIONS.plugins.tooltip,
             callbacks: {
-              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw} ราย/วัน`
+              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`
             }
           }
         }
@@ -191,17 +236,19 @@ function renderOverviewCharts() {
 }
 
 /**
- * Tab 2: IPD & Home Ward Charts
+ * Tab 2: Quality & Patient Safety Charts
  */
-function renderIpdHomeWardCharts() {
+function renderQualitySafetyCharts() {
   const years = activeDataset.yearLabels;
-  const ipdPatients = getMetric("ipd_patients").values;
-  const occupancyRate = getMetric("ipd_occupancy_rate").values;
 
-  const homeWardPatients = getMetric("homeward_patients").values;
-  const homeWardDays = getMetric("homeward_bed_days").values;
+  const doorEkg = getMetric("door_to_ekg").values;
+  const compEval = getMetric("competency_eval").values;
+  const recordScore = getMetric("nursing_record_score").values;
 
-  // Chart 2.1: IPD Patients & Bed Occupancy Rate (Dual Axis)
+  const ulcer = getMetric("pressure_ulcer_rate").values;
+  const cauti = getMetric("cauti_rate").values;
+
+  // Chart 2.1: คุณภาพสมรรถนะและการบันทึกการพยาบาล
   const ctx1 = document.getElementById('chartIpdOccupancy');
   if (ctx1) {
     if (chartInstances.ipdOccupancy) chartInstances.ipdOccupancy.destroy();
@@ -212,43 +259,34 @@ function renderIpdHomeWardCharts() {
         labels: years,
         datasets: [
           {
-            type: 'bar',
-            label: 'จำนวนผู้ป่วยใน (IPD)',
-            data: ipdPatients,
-            backgroundColor: 'rgba(99, 102, 241, 0.85)', // Indigo
-            borderRadius: 6,
-            yAxisID: 'y'
+            label: 'ประเมินสมรรถนะดูแลโรคสำคัญ (%)',
+            data: compEval,
+            backgroundColor: '#0d9488',
+            borderRadius: 6
           },
           {
-            type: 'line',
-            label: 'อัตราครองเตียง IPD (%)',
-            data: occupancyRate,
-            borderColor: '#f43f5e', // Rose
-            backgroundColor: '#f43f5e',
-            borderWidth: 3,
-            tension: 0.3,
-            pointRadius: 6,
-            yAxisID: 'y1'
+            label: 'บันทึกกระบวนการพยาบาล (%)',
+            data: recordScore,
+            backgroundColor: '#6366f1',
+            borderRadius: 6
+          },
+          {
+            label: 'Door to EKG < 10 นาที (%)',
+            data: doorEkg,
+            backgroundColor: '#f59e0b',
+            borderRadius: 6
           }
         ]
       },
       options: {
         ...COMMON_OPTIONS,
         scales: {
-          x: COMMON_OPTIONS.scales.x,
+          x: { grid: { display: false }, ticks: { font: { family: 'Sarabun', size: 12 }, color: '#64748b' } },
           y: {
-            type: 'linear',
-            position: 'left',
             grid: { color: '#f1f5f9' },
-            ticks: { font: { family: 'Sarabun', size: 12 }, color: '#64748b' },
-            title: { display: true, text: 'จำนวนผู้ป่วย (ราย)', font: { family: 'Sarabun', size: 11 } }
-          },
-          y1: {
-            type: 'linear',
-            position: 'right',
-            grid: { drawOnChartArea: false },
-            ticks: { font: { family: 'Sarabun', size: 12 }, color: '#f43f5e', callback: (val) => `${val}%` },
-            title: { display: true, text: 'อัตราครองเตียง (%)', font: { family: 'Sarabun', size: 11 } }
+            min: 40,
+            max: 100,
+            ticks: { font: { family: 'Sarabun', size: 12 }, callback: (v) => `${v}%` }
           }
         },
         plugins: {
@@ -256,12 +294,7 @@ function renderIpdHomeWardCharts() {
           tooltip: {
             ...COMMON_OPTIONS.plugins.tooltip,
             callbacks: {
-              label: (ctx) => {
-                if (ctx.dataset.yAxisID === 'y1') {
-                  return ` ${ctx.dataset.label}: ${ctx.raw}%`;
-                }
-                return ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} ราย`;
-              }
+              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw}%`
             }
           }
         }
@@ -269,7 +302,7 @@ function renderIpdHomeWardCharts() {
     });
   }
 
-  // Chart 2.2: Home Ward Explosive Growth (2567 - 2569)
+  // Chart 2.2: อัตราความปลอดภัยผู้ป่วย (แผลกดทับ & CA-UTI)
   const ctx2 = document.getElementById('chartHomeWardGrowth');
   if (ctx2) {
     if (chartInstances.homeWardGrowth) chartInstances.homeWardGrowth.destroy();
@@ -280,44 +313,26 @@ function renderIpdHomeWardCharts() {
         labels: years,
         datasets: [
           {
-            type: 'bar',
-            label: 'จำนวนผู้ป่วย Home Ward (ราย)',
-            data: homeWardPatients,
-            backgroundColor: '#10b981', // Emerald
-            borderRadius: 6,
-            yAxisID: 'y'
+            label: 'แผลกดทับรายใหม่ (ต่อ 1,000 วันนอน)',
+            data: ulcer,
+            backgroundColor: '#f43f5e', // Rose
+            borderRadius: 6
           },
           {
-            type: 'line',
-            label: 'วันนอนสะสม Home Ward (วัน)',
-            data: homeWardDays,
-            borderColor: '#0d9488', // Teal
-            backgroundColor: 'rgba(13, 148, 136, 0.15)',
-            borderWidth: 3,
-            fill: true,
-            tension: 0.3,
-            pointRadius: 6,
-            yAxisID: 'y1'
+            label: 'ติดเชื้อ CA-UTI (ต่อ 1,000 วันคาสาย)',
+            data: cauti,
+            backgroundColor: '#f59e0b', // Amber
+            borderRadius: 6
           }
         ]
       },
       options: {
         ...COMMON_OPTIONS,
         scales: {
-          x: COMMON_OPTIONS.scales.x,
+          x: { grid: { display: false }, ticks: { font: { family: 'Sarabun', size: 12 }, color: '#64748b' } },
           y: {
-            type: 'linear',
-            position: 'left',
             grid: { color: '#f1f5f9' },
-            ticks: { font: { family: 'Sarabun', size: 12 }, color: '#64748b' },
-            title: { display: true, text: 'จำนวนผู้ป่วย (ราย)', font: { family: 'Sarabun', size: 11 } }
-          },
-          y1: {
-            type: 'linear',
-            position: 'right',
-            grid: { drawOnChartArea: false },
-            ticks: { font: { family: 'Sarabun', size: 12 }, color: '#0d9488' },
-            title: { display: true, text: 'วันนอนสะสม (วัน)', font: { family: 'Sarabun', size: 11 } }
+            ticks: { font: { family: 'Sarabun', size: 12 }, callback: (v) => `${v}` }
           }
         },
         plugins: {
@@ -325,12 +340,7 @@ function renderIpdHomeWardCharts() {
           tooltip: {
             ...COMMON_OPTIONS.plugins.tooltip,
             callbacks: {
-              label: (ctx) => {
-                if (ctx.dataset.yAxisID === 'y1') {
-                  return ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} วัน`;
-                }
-                return ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} ราย`;
-              }
+              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw}`
             }
           }
         }
@@ -340,18 +350,17 @@ function renderIpdHomeWardCharts() {
 }
 
 /**
- * Tab 3: Referral & Mortality Charts
+ * Tab 3: Satisfaction & Community Nursing Charts
  */
-function renderReferralMortalityCharts() {
+function renderSatisfactionCommunityCharts() {
   const years = activeDataset.yearLabels;
-  const referOpd = getMetric("refer_opd").values;
-  const referEr = getMetric("refer_er").values;
-  const referIpd = getMetric("refer_ipd").values;
 
-  const deathsIpd = getMetric("deaths_ipd").values;
-  const deathsEr = getMetric("deaths_er").values;
+  const opdSat = getMetric("opd_satisfaction").values;
+  const ipdSat = getMetric("ipd_satisfaction").values;
+  const commSat = getMetric("community_satisfaction").values;
+  const homeVisit = getMetric("home_visit_rate").values;
 
-  // Chart 3.1: Referral Statistics (Refer OPD, Refer ER, Refer IPD)
+  // Chart 3.1: สถิติความพึงพอใจ 3 กลุ่มผู้รับบริการ
   const ctx1 = document.getElementById('chartReferral');
   if (ctx1) {
     if (chartInstances.referral) chartInstances.referral.destroy();
@@ -362,20 +371,20 @@ function renderReferralMortalityCharts() {
         labels: years,
         datasets: [
           {
-            label: 'Refer OPD',
-            data: referOpd,
+            label: 'ความพึงพอใจผู้ป่วยใน (IPD)',
+            data: ipdSat,
             backgroundColor: '#0d9488',
             borderRadius: 6
           },
           {
-            label: 'Refer ER',
-            data: referEr,
-            backgroundColor: '#f59e0b',
+            label: 'ความพึงพอใจประชาชนในชุมชน',
+            data: commSat,
+            backgroundColor: '#10b981',
             borderRadius: 6
           },
           {
-            label: 'Refer IPD',
-            data: referIpd,
+            label: 'ความพึงพอใจผู้ป่วยนอก (OPD)',
+            data: opdSat,
             backgroundColor: '#6366f1',
             borderRadius: 6
           }
@@ -383,12 +392,21 @@ function renderReferralMortalityCharts() {
       },
       options: {
         ...COMMON_OPTIONS,
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { family: 'Sarabun', size: 12 }, color: '#64748b' } },
+          y: {
+            grid: { color: '#f1f5f9' },
+            min: 75,
+            max: 100,
+            ticks: { font: { family: 'Sarabun', size: 12 }, callback: (v) => `${v}%` }
+          }
+        },
         plugins: {
           ...COMMON_OPTIONS.plugins,
           tooltip: {
             ...COMMON_OPTIONS.plugins.tooltip,
             callbacks: {
-              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()} ราย`
+              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw.toFixed(2)}%`
             }
           }
         }
@@ -396,38 +414,45 @@ function renderReferralMortalityCharts() {
     });
   }
 
-  // Chart 3.2: Mortality Statistics (IPD vs ER)
+  // Chart 3.2: อัตราการได้รับการเยี่ยมบ้านตามเกณฑ์ (Home Visit Rate)
   const ctx2 = document.getElementById('chartMortality');
   if (ctx2) {
     if (chartInstances.mortality) chartInstances.mortality.destroy();
 
     chartInstances.mortality = new Chart(ctx2, {
-      type: 'bar',
+      type: 'line',
       data: {
         labels: years,
         datasets: [
           {
-            label: 'จำนวนเสียชีวิต IPD',
-            data: deathsIpd,
-            backgroundColor: '#f43f5e', // Rose
-            borderRadius: 6
-          },
-          {
-            label: 'จำนวนเสียชีวิต ER',
-            data: deathsEr,
-            backgroundColor: '#e11d48', // Dark Rose
-            borderRadius: 6
+            label: 'อัตราการเยี่ยมบ้านตามเกณฑ์ (%)',
+            data: homeVisit,
+            borderColor: '#0d9488',
+            backgroundColor: 'rgba(13, 148, 136, 0.15)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 6
           }
         ]
       },
       options: {
         ...COMMON_OPTIONS,
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { family: 'Sarabun', size: 12 }, color: '#64748b' } },
+          y: {
+            grid: { color: '#f1f5f9' },
+            min: 50,
+            max: 100,
+            ticks: { font: { family: 'Sarabun', size: 12 }, callback: (v) => `${v}%` }
+          }
+        },
         plugins: {
           ...COMMON_OPTIONS.plugins,
           tooltip: {
             ...COMMON_OPTIONS.plugins.tooltip,
             callbacks: {
-              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw} ราย`
+              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw}% (เป้าหมาย > 80%)`
             }
           }
         }
