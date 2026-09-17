@@ -207,12 +207,39 @@ function parseGoogleSheetsCSV(csvText) {
 
     if (!rawName) continue;
 
-    // Match with fallback metric definition
-    const fallbackMatch = FALLBACK_DATASET.metrics.find(m => 
-      m.no === noVal ||
-      m.name.trim().toLowerCase() === rawName.toLowerCase() ||
-      rawName.toLowerCase().includes(m.name.trim().slice(0, 10).toLowerCase())
-    );
+    // 1. Try exact match by metric number (noVal)
+    let fallbackMatch = FALLBACK_DATASET.metrics.find(m => m.no === noVal);
+
+    // 2. If no match by number, try exact name match
+    if (!fallbackMatch) {
+      fallbackMatch = FALLBACK_DATASET.metrics.find(m => 
+        m.name.trim().toLowerCase() === rawName.toLowerCase()
+      );
+    }
+
+    // 3. If still no match, match by distinct keywords
+    if (!fallbackMatch) {
+      const lowerRaw = rawName.toLowerCase();
+      if (lowerRaw.includes("ผู้ป่วยใน")) {
+        fallbackMatch = FALLBACK_DATASET.metrics.find(m => m.id === "ipd_satisfaction");
+      } else if (lowerRaw.includes("ผู้ป่วยนอก")) {
+        fallbackMatch = FALLBACK_DATASET.metrics.find(m => m.id === "opd_satisfaction");
+      } else if (lowerRaw.includes("ชุมชน")) {
+        fallbackMatch = FALLBACK_DATASET.metrics.find(m => m.id === "community_satisfaction");
+      } else if (lowerRaw.includes("ekg")) {
+        fallbackMatch = FALLBACK_DATASET.metrics.find(m => m.id === "door_to_ekg");
+      } else if (lowerRaw.includes("สมรรถนะ")) {
+        fallbackMatch = FALLBACK_DATASET.metrics.find(m => m.id === "competency_eval");
+      } else if (lowerRaw.includes("บันทึก")) {
+        fallbackMatch = FALLBACK_DATASET.metrics.find(m => m.id === "nursing_record_score");
+      } else if (lowerRaw.includes("แผลกดทับ")) {
+        fallbackMatch = FALLBACK_DATASET.metrics.find(m => m.id === "pressure_ulcer_rate");
+      } else if (lowerRaw.includes("uti") || lowerRaw.includes("สายสวน")) {
+        fallbackMatch = FALLBACK_DATASET.metrics.find(m => m.id === "cauti_rate");
+      } else if (lowerRaw.includes("เยี่ยมบ้าน")) {
+        fallbackMatch = FALLBACK_DATASET.metrics.find(m => m.id === "home_visit_rate");
+      }
+    }
 
     const values = [];
     // Extract year values (columns 3, 4, 5 -> 2567, 2568, 2569)
